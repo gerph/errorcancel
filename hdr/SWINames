@@ -1,0 +1,12 @@
+
+        MACRO
+$name   DEFINESWI $value
+$name   * $value
+X$name  * $value + (1<<17)
+        MEND
+
+OS_Byte DEFINESWI 0x00000006                                   ;  &06
+OS_CallAfter DEFINESWI 0x0000003B                              ;  &3B
+OS_RemoveTickerEvent DEFINESWI 0x0000003D                      ;  &3D
+
+        END

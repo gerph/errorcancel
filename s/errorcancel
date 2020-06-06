@@ -6,6 +6,8 @@
 ;   Date   : Saturday, 12th September 2015
 ;   Started: Saturday, 29th August 2015
 ;
+; forked 2020-06-06 by gerph for CI demonstration
+;
 ;
 ; ErrorCancel - to dismiss error messages that would otherwise block the machine.
 ;
@@ -29,7 +31,7 @@
 
 
 ; Our inclusions
-         GET  ^.^._module.h.SWINames   ; SWI definitions, from Module. Painful include time!
+         GET  hdr.SWINames   ; SWI definitions. Just the ones we need.
 
 
          GBLS CODENAME
