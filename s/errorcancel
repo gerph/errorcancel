@@ -1,0 +1,229 @@
+; ErrorCancel
+; ===========
+;
+; by Rick Murray
+;   Version: 0.01
+;   Date   : Saturday, 12th September 2015
+;   Started: Saturday, 29th August 2015
+;
+;
+; ErrorCancel - to dismiss error messages that would otherwise block the machine.
+;
+; Sort of like "NoErrors" did in the '90s. I used to use that with my ARCbbs setup, along
+; with Gerph's "RecErrors", but dunno where NoErrors went and Gerph, sadly, ran away
+; screaming from the unbelievable insanity and stupidity that washed across the world.
+;
+; So here's my lame effort that will attempt to sort-of do what they did. I think my English
+; teacher would have a nervous breakdown if she saw that last sentence, but she was coming
+; on retirement ago and that was <mumble> years ago so... um... is this why my hair is
+; going white? Bad grammar? Yeah, that's it. If I can successfully conjugate a past
+; indicative pluperfect conditional, then I'll look like a twenty year old again and chicks
+; will love me like they somehow failed to do the first time around. So, right, excuse me
+; while I hit Wikipedia to try to figure out what the hell a past indicative something
+; something actually is.
+;
+;
+; Yes. This is a Rick program. You expected the comments to be relevant and make sense?
+; You're new here, aren't you?
+
+
+
+; Our inclusions
+         GET  ^.^._module.h.SWINames   ; SWI definitions, from Module. Painful include time!
+
+
+         GBLS CODENAME
+CODENAME SETS "ErrorCancel"  ; name officially allocated 2015/12/11
+
+         GBLS CODEVERS
+CODEVERS SETS "0.01"
+
+         GBLS CODEDATE
+CODEDATE SETS "12 Sep 2015"  ; Date format MUST be "DD Mmm CCYY" for RISC OS to recognise it
+
+         GBLS CODECOPY
+CODECOPY SETS "© 2015 Rick Murray"
+
+
+; Constants
+Service_ReportError * &57
+Delay           * 500        ; five seconds
+SetEscCond      * &7D        ; Set Escape Condition (fakes pressing Esc)
+
+
+
+; ===========
+; Here we go!
+; ===========
+
+        AREA     |ErrCancel$Code|, CODE, DATA, PIC, A32bit
+        ENTRY
+
+entrypoint
+        ; Standard RISC OS module header
+        DCD      0                           ; no Start code
+        DCD      (initialise - entrypoint)   ; Initialise code
+        DCD      0                           ; no Finalise code
+        DCD      (servicecall - entrypoint)  ; Service call handler
+        DCD      (titlestring - entrypoint)  ; Module title string
+        DCD      (helpstring - entrypoint)   ; Module help string
+	DCD 	 0                           ; no Help/command table
+        DCD      0                           ; no SWI chunk
+        DCD      0                           ; no SWI handler code
+        DCD      0                           ; no SWI decoding table
+        DCD      0                           ; no SWI decoding code
+        DCD      0                           ; no Messages file
+        DCD      (thirtytwo - entrypoint)    ; 32bit flag word
+
+
+titlestring
+        =        CODENAME, 0
+        ALIGN
+
+
+helpstring
+        =        CODENAME, 9, CODEVERS, " (", CODEDATE, ") ", CODECOPY, 0
+        ALIGN
+
+
+thirtytwo
+        ; Zeroeth bit doth be set indicateth this be a 32bit-compatibleth module...
+        DCD      1
+
+
+dadebug_writec
+        DCD      0                            ; we write to this word (so this isn't ROMable)
+
+
+error_prefix
+        =        "System error: ", 34, 0
+        ALIGN
+
+error_suffix
+        =        34, 46, 13, 10               ; quote, period, CR, LF
+        =         0,  0,  0,  0               ; null and padding
+
+
+initialise
+        ; See if DADebug is available, and if it is, read its WriteC address.
+        STMFD    R13!, {R0-R3, R14}
+        SWI      &731C0                      ; XDADebug_GetWriteCAddress
+        MOVVS    R0, #0                      ; no, so set address to be NULL
+        ADR      R1, dadebug_writec
+        STR      R0, [R1]                    ; remember this address
+        CMP      R1, #0                      ; hacky way to clear V (R1 will be in RMA (< 2GiB))
+        LDMFD    R13!, {R0-R3, PC}
+
+
+fast_table
+        DCD      0                           ; start of table
+        DCD      (fast_entry - entrypoint)   ; where to go to handle this call
+        DCD      Service_ReportError         ; Service Call we're interested in
+        DCD      0                           ; end of table
+
+        DCD      (fast_table - entrypoint)   ; pointer to fast table
+servicecall
+        MOV      R0, R0                      ; flag that there is a fast case table
+        TEQ      R1, #Service_ReportError    ; is this the call we're interested in?
+        MOVNE    PC, R14                     ; if not, get out
+
+fast_entry                                   ; come here if using fast table
+        ; Service_WimpReportError
+        ;   R0 = 0 if window is closing
+        ;        1 if window is opening
+        ;   R1 = Service call number (&57)
+        ;   R2 = Pointer to error block
+        ;   R3 = Flags
+        ;   R4+= (etc...as for Wimp_ReportError only R2-R7)
+        ; Be careful - RISC OS uses the values in R2-R7 for the error report so we
+        ;              shouldn't alter anything.
+
+        CMP      R0, #0                      ; closing?
+        BEQ      remove_callafter            ; if so, cancel the CallAfter
+
+        ; otherwise...
+        STMFD    R13!, {R0-R3, R14}
+        BL       preserve_error              ; spit the error message to DADebug
+        MOV      R0, #Delay                  ; come back in 250 centiseconds
+        ADR      R1, set_escape_condition
+        MOV      R2, #0                      ; don't bother with private word
+        SWI      XOS_CallAfter
+        LDMFD    R13!, {R0-R3, PC}
+
+
+remove_callafter
+        STMFD    R13!, {R0-R3, R14}
+        ; As we are a one-shot, either the timeout will expire, or the window
+        ; will be closed; so there shouldn't be a time when we would call this
+        ; with nothing to "unset".
+        ADR      R0, set_escape_condition
+        MOV      R1, #0
+        SWI      XOS_RemoveTickerEvent
+        LDMFD    R13!, {R0-R3, PC}
+
+        ; Note - we don't need to remove the ticker (even if outstanding) upon the
+        ; module being quit, because if not done as a callback (ie extremely contrived),
+        ; it would require quitting the module *while* there is a (blocking) error
+        ; message on the screen...
+
+
+preserve_error
+        ; Write error message to DADebug.
+        ; Error block is in R2 (bzzt! nope! R4!) on entry. We can corrupt R0, R1 and R3.
+        ADR      R0, dadebug_writec
+        LDR      R3, [R0]                    ; retrieve DADebug's WriteC address
+        CMP      R3, #0                      ; is it zero?
+        MOVEQ    PC, R14                     ; if so, bail
+
+        STR      R14, [R13, #-4]!
+
+        ADR      R1, error_prefix            ; write the nice prefix string
+        BL       debug_write0
+
+        ; The Wimp code stacks R0-R5 and then pulls that into R2-R7; so the R0 (error
+        ; block) SHOULD be in R2. But it isn't. R2 is &FFFFFFFF. The error block is
+        ; actually in R4. Why? Hell if I know, but this behaviour goes right back to
+        ; the RISC OS 3.50 Wimp (tested in an emulator with some older ROMs), so I
+        ; guess we can consider it to be suitably 'official'. ;-)
+        ADD      R1, R4, #4                  ; pick up the error message
+        BL       debug_write0
+
+        ADR      R1, error_suffix            ; and finally the suffix string
+        BL       debug_write0
+
+        LDR      PC, [R13], #4               ; done
+
+
+debug_write0
+        ; Write the string in R1 to DADebug (WriteC address in R3). We can use R0 and R2.
+        STR      R14, [R13, #-4]!
+
+write0_loop
+        LDRB     R0, [R1], #1                ; read byte from string (and increment offset)
+        CMP      R0, #1                      ; is it a null?
+        MOVCS    R14, PC
+        LDRCS    PC, dadebug_writec          ; if no - write the byte
+        CMP      R0, #1
+        BCS      write0_loop                 ; keep going until we get a null
+
+        LDR      PC, [R13], #4
+
+
+set_escape_condition
+        ; Okay, here's the joy juice - let's make that nasty error message go away.
+        ; We are called in SVC mode with IRQs disabled.
+        STMFD    R13!, {R0-R3, R14}
+        MOV      R0, #SetEscCond
+        SWI      XOS_Byte                    ; t'was simple :-)
+        LDMFD    R13!, {R0-R3, PC}
+
+
+pointless_embedded_message
+        ; This is from "Edema Ruh" by Nighwish on their "Endless Forms Most Beautiful" album, track 8.
+        =        "\n\nDance to the whistle, to the play, to the story,\n"
+        =        "To infinite encores.\n"
+        =        "Laugh at the royalty with sad crowns,\n"
+        =        "And repeat the chorus once more.\n\n" ; is exactly word aligned
+
+
+        END
