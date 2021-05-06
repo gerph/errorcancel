@@ -1,0 +1,20 @@
+REM >TestError
+
+REM Rudimentary test that the error is cancelled
+PRINT "Testing error box cancelling - if this hangs, we failed"
+start = TIME
+SYS "Wimp_ReportError", "0000My Error Message", %11, "Myapp" TO ,response
+REM If we reached here this is a success, because it cancelled the error box without
+REM any user interaction.
+REM In the CI, this will hang.
+elapsed = TIME-start
+
+REM Report what we got
+PRINT "Got response: ";response
+PRINT "Took ";elapsed / 100; " seconds"
+
+REM We can check these are what we expect.
+IF response <> 2 THEN ERROR EXT 0, "Should have got response 2 (cancel)"
+IF elapsed < 500 THEN ERROR EXT 0, "Terminated too quickly (should be about 5 seconds)"
+IF elapsed > 550 THEN ERROR EXT 0, "Terminated too slowly (should be about 5 seconds)"
+PRINT "Success"
