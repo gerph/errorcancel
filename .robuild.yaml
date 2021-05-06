@@ -26,6 +26,17 @@ jobs:
       - objasm s.ErrorCancel -o o.ErrorCancel
       - link -rmf o.ErrorCancel -o rm.ErrorCancel
 
+      # Now let's check that it is loadable
+      - echo Loading module...
+      - RMLoad rm.ErrorCancel
+
+      # And test that it works
+      # (we must prevent the keyboard read from exiting the system, so we turn this off here)
+      - pyromaniacconfig input.eof_effect=none
+      - echo Running test...
+      - Basic -quit TestError
+      - echo All done
+
     # Outputs from the build are defined in artifacts
     # These are a list of artifacts to report directories or files.
     # Only a single item is currently supported.
