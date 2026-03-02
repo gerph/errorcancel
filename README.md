@@ -24,5 +24,5 @@ Documentation for the .robuild.yaml file format can be found on the
 JFPatch-as-a-service website, and the example here just invokes the
 assembler and the linker to make the module.
 
-For GitHub workflows, see the file .github/workflows/jfpatch.yml.
+For GitHub workflows, see the file .github/workflows/ci.yml.
 For GitLab CI, see the file .gitlab-ci.yml.
