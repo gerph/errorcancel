@@ -1,7 +1,7 @@
 %YAML 1.0
 ---
 
-# Example .robuild.yml file
+# RISC OS build file to execute on https://build.riscos.online/
 
 # Source is optional (NYI), and should be a URL to source the content from
 #source: <url>
@@ -15,6 +15,9 @@ jobs:
     env:
       "Sys$Environment": ROBuild
 
+      # Faster building using the host toolchain
+      "Alias$ObjAsm": "HostObjAsm %*0"
+
     # Directory to change to before running script
     #dir: <working directory>
 
@@ -23,8 +26,8 @@ jobs:
     script:
       - cdir o
       - cdir rm
-      - objasm s.ErrorCancel -o o.ErrorCancel
-      - link -rmf o.ErrorCancel -o rm.ErrorCancel
+      - objasm s.errorcancel -o o.errorcancel
+      - link -rmf o.errorcancel -o rm.ErrorCancel
 
     # Outputs from the build are defined in artifacts
     # These are a list of artifacts to report directories or files.
